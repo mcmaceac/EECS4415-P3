@@ -72,7 +72,7 @@ drop type if exists
     intRec
     cascade;
 create type intRec as (
-    number  int,
+    number  float,
     restart boolean
 );
 
@@ -82,7 +82,7 @@ drop type if exists
     stateCount
     cascade;
 create type stateCount as (
-    state int,
+    state float,
     count int
 );
 
@@ -108,8 +108,8 @@ as $f$
             j.state := i.state;
             j.count := 1;
         else
-            j.state := a.number + i.state;
             j.count := i.count + 1;
+            j.state := i.state + (a.number - i.state)/j.count;
         end if;
         return j;
     end
@@ -126,7 +126,7 @@ create function runningAvg_final(stateCount)
 returns intRec
 language sql
 as $f$
-    select cast(($1.count, false) as intRec);
+    select cast(($1.state, false) as intRec);
 $f$;
 
 -- ---------------------------------------------------------------------------
