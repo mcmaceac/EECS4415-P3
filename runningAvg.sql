@@ -76,62 +76,75 @@ create type intRec as (
     restart boolean
 );
 
+-- stateCount : a composite type that has two ints, one for the state and one for the i value
+\echo -- creating composite type "stateCount"
+drop type if exists
+    stateCount
+    cascade;
+create type stateCount as (
+    state int,
+    count int
+);
+
 -- ---------------------------------------------------------------------------
--- runningSum_state : accumulator function
-\echo -- creating function "runningSum_state"
+-- runningAvg_state : accumulator function
+\echo -- creating function "runningAvg_state"
 
 drop function if exists
-    runningSum_state(int, intRec)
+    runningAvg_state(stateCount, intRec)
     cascade;
-create function runningSum_state(int, intRec)
-returns int
+create function runningAvg_state(stateCount, intRec)
+returns stateCount
 language plpgsql
 as $f$
     declare i alias for $1;
     declare a alias for $2;
-    declare j int;
+    declare j stateCount;
     begin
-        if a.restart or i is null then
-            j := a.number;
+        if a.restart or i is null then  --beginning of a group or stream
+            j.state := a.number;
+            j.count := 1;
         elsif a.number is null then
-            j := i;
+            j.state := i.state;
+            j.count := 1;
         else
-            j := a.number + i;
+            j.state := a.number + i.state;
+            j.count := i.count + 1;
         end if;
         return j;
     end
 $f$;
 
 -- ---------------------------------------------------------------------------
--- runningSum_final : returns the aggregate value
-\echo -- creating function "runningSum_final"
+-- runningAvg_final : returns the aggregate value
+\echo -- creating function "runningAvg_final"
 
 drop function if exists
-    runningSum_final(int)
+    runningAvg_final(stateCount)
     cascade;
-create function runningSum_final(int)
+create function runningAvg_final(stateCount)
 returns intRec
 language sql
 as $f$
-    select cast(($1, false) as intRec);
+    select cast(($1.count, false) as intRec);
 $f$;
 
 -- ---------------------------------------------------------------------------
--- runningSum : the aggregate function
-\echo -- creating aggregate function "runningSum"
+-- runningAvg : the aggregate function
+\echo -- creating aggregate function "runningAvg"
 
 drop aggregate if exists
-    runningSum(intRec)
+    runningAvg(intRec)
     cascade;
-create aggregate runningSum(intRec) (
-    sfunc     = runningSum_state,
-    stype     = int,
-    finalfunc = runningSum_final
+create aggregate runningAvg(intRec) (
+    sfunc     = runningAvg_state,
+    stype     = stateCount,
+    finalfunc = runningAvg_final
 );
 
 -- ---------------------------------------------------------------------------
--- pipeline sliging-window query that uses our agggregate function
-\echo -- querying "Stream" with running sum
+-- pipeline sliding-window query that uses our aggregate function
+\echo -- querying "Stream" with running avg
 
 with
     -- look at the neighbour tuple to the left to fetch its grp value
@@ -169,16 +182,16 @@ with
                 cast((measure, start) as intRec)
         from CellStart
     ),
-    -- call our runningSum aggregator
+    -- call our runningAvg aggregator
     CellRun(id, grp, measure, runningRC) as (
         select  id,
                 grp,
                 (intRC).number,
-                runningSum(intRC)
+                runningAvg(intRC)
                     over (order by id)
         from CellFlag
     ),
-    -- extract the running sum from the composite
+    -- extract the running avg from the composite
     CellAggr(id, grp, measure, running) as (
         select  id,
                 grp,
