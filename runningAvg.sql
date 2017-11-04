@@ -1,17 +1,5 @@
--- ===========================================================================
--- pipelined sum by partition
---     This is use of a user-defined aggregate function, but in an "inverted"
---     way to usual.  It aggregates over a composite type!  The composite
---     type is passing in the INT to add to the sum as well as a boolean
---     flag indicating whether the tuple is the start of a partition (and
---     thus the running sum needs to be reset).  Interestingly, we only
---     need an INT as internal state for the aggregate function.
---
---     This is 100% pipelined; there is no group by!  And all
---     order-by's are with respect to the same criterion: id asc.
--- ---------------------------------------------------------------------------
--- created  : 2017-07-31
--- authors  : Mark Dogfury
+-- created  : 2017-11-04
+-- authors  : Matthew MacEachern
 -- platform : PostgreSQL 9.6
 -- ===========================================================================
 
@@ -192,7 +180,7 @@ with
         from CellFlag
     ),
     -- extract the running avg from the composite
-    CellAggr(id, grp, measure, running) as (
+    CellAggr(id, grp, measure, average) as (
         select  id,
                 grp,
                 measure,
@@ -200,7 +188,7 @@ with
         from CellRun
     )
 -- report
-select id, grp, measure, running
+select id, grp, measure, average
 from CellAggr
 order by id;
 
